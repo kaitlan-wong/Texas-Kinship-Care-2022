@@ -1,0 +1,118 @@
+---
+title: "Texas Kinship Care 2022"
+author: "Kaitlan Wong"
+date: "2023-03-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require("knitr")
+library(ipumsr,quietly = T)
+library(dplyr,quietly = T)
+library(car,quietly = T)
+library(zoo,quietly = T)
+library(ggplot2,quietly = T)
+library(questionr,quietly = T)
+library(survey,quietly = T)
+library(png)
+library(tableone)
+library(stringr)
+library(psych)
+library(gtsummary)
+library(tidyverse)
+library(naniar)
+
+
+```
+
+```{r}
+#Read in CPS data from IPUMS
+
+cps_ddi <- read_ipums_ddi("cps_00004.xml")
+cps_data <- read_ipums_micro("cps_00004.xml", data_file = ("cps_00004.dat.gz"), verbose = FALSE)
+
+#Convert variable names to lower case
+names(cps_data) <- tolower(names(cps_data))
+
+#View(cps_data)
+is.data.frame(cps_data)
+describe(cps_data)
+
+```
+
+
+
+```{r}
+#Basic data cleaning & data exploration 
+names(cps_data) #use names when you want to see the names of your variables  
+typeof(cps_data$language)
+
+#Determine how many NAs there are 
+sum(is.na(cps_data))
+#Percent missing values per variable
+apply(cps_data, 2, function(col)sum(is.na(col))/length(col))
+
+#Remove missing cases 
+na.omit(cps_data)
+
+```
+
+
+```{r}
+###Recodes###
+
+#View names of variables and data
+names(cps_data)
+view(cps_data)
+
+#Filter for Texas data
+TX_kinship_data <- cps_data %>% 
+  filter(statefip == 48) %>% 
+  filter(pelnpar1 == 0 & pelnpar2 == 0) %>% 
+  filter(relate %in% c(0701,0901,1001))
+
+#Condense Race and Ethnicity categories to create a new race/ethnicity variable
+TX_kinship_data_final <-TX_kinship_data %>%
+  mutate(race_eth=case_when(hispan %in% c(100,102:104,108,109,200,300,400,500,600,610:612) & race %in% c(100,200,300,650:652,700,801:820,830) ~ "Hispanic",
+                             hispan == 000 & race == 100 ~ "White, non-Hispanic", 
+                             hispan == 000 & race == 200 ~ "Black, non-Hispanic",
+                             hispan == 000 & race == 300 ~ "AIAN, non-Hispanic",
+                             hispan == 000 & race %in% c(650:652) ~ "Asian or Pacific Islander, non-Hispanic",
+                             hispan == 000 & race == 700 ~ "Other, non-Hispanic",
+                             hispan == 000 & race %in% c(801:820,830) ~ "Multiracial, non-Hispanic",
+                             TRUE ~ NA_character_),
+        poverty_level=case_when(poverty == 10 ~ "Below 100%",
+                                poverty %in% c(10,21,22) ~ "Below 150%",
+                                poverty == 23 ~ "150% and above"))
+
+# View the data with the two new variables (race/ethnicity and poverty level)
+view(TX_kinship_data_final)
+```
+
+
+```{r}
+#Create a bar chart showing distribution of children living in kinship homes by race and ethnicity
+
+ggplot(TX_kinship_data_final) +
+  aes(x = race_eth, fill = race_eth,  stat = "percent") +
+  geom_bar()
+
+#Create a bar chart showing distribution of children living in kinship homes by poverty level
+
+ggplot(TX_kinship_data_final) +
+  aes(x = poverty_level, fill = poverty_level,  stat = "percent") +
+  geom_bar()
+
+```
+
+
+```{r}
+#Create excel file with new variables 
+
+library(writexl)
+write_xlsx(TX_kinship_data_final,"C:\\Users\\kaitl\\Documents\\Every Texan\\R\\Kinship Care Data\\TX_Kinship_2022.xlsx")
+
+```
+
+
